@@ -7,6 +7,12 @@ s2_p4s = "+proj=geocent +a=1 +b=1 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 
 
 #nocov start
 
+#' functions for spherical geometry, using s2 package
+#' 
+#' functions for spherical geometry, using the s2 package based on the google s2 library
+#' @name s2 
+#' @export
+#' @details \code{st_as_s2} converts an \code{sf} POLYGON object into a form readable by \code{s2}.
 st_as_s2 = function(x) {
 	# geocentric, spherical:
 	geom = st_transform(st_geometry(x), st_crs(s2_p4s))
@@ -22,7 +28,11 @@ load_s2 = function() {
 		stop("package s2 required, please install it first")
 }
 
+#' @name s2
 #' @export
+#' @param x object of class \code{sf}, or \code{sfc}
+#' @param ... passed on to \link{st_transform}
+#' @param crs object of class \code{crs}
 st_as_sfc.S2Polygon = function(x, ..., crs = st_crs(4326)) {
 	# close all loops:
 	loops = lapply(x$loops, function(L) rbind(L, L[1,]))
@@ -33,7 +43,7 @@ st_as_sfc.S2Polygon = function(x, ..., crs = st_crs(4326)) {
 		st_multipolygon(split(loops, splt))
 	else
 		st_polygon(loops)
-	st_zm(st_transform(st_sfc(p, crs = st_crs(s2_p4s)), crs))
+	st_zm(st_transform(st_sfc(p, crs = st_crs(s2_p4s)), crs, ...))
 }
 
 #' @export
@@ -48,24 +58,33 @@ st_as_sfc.S2Points = function(x, ..., crs = st_crs(4326)) {
 		crs))
 }
 
+#' @name s2
+#' @export
+#' @param y object of class \code{sf}, or \code{sfc}
 s2_intersection = function(x, y) {
 	load_s2()
 	stopifnot(st_crs(x) == st_crs(y))
 	st_as_sfc(s2::S2Polygons_intersection(st_as_s2(x), st_as_s2(y)), crs = st_crs(x))
 }
 
+#' @name s2
+#' @export
 s2_intersects = function(x, y) {
 	load_s2()
 	stopifnot(st_crs(x) == st_crs(y))
 	s2::S2Polygons_intersect(st_as_s2(x), st_as_s2(y))
 }
 
+#' @name s2
+#' @details \code{s2_centroid} computes the spherical centroid of a set of polygons
 s2_centroid = function(x) {
 	load_s2()
 	st_as_sfc(structure(s2::S2Polygons_centroid(st_as_s2(x)), class = "S2Points"),
 		crs = st_crs(x))
 }
 
+#' @name s2
+#' @details \code{s2_area} computes the area of a set of polygons, as a fraction of 4 * pi.
 s2_area = function(x) {
 	load_s2()
 	s2::S2Polygons_area(st_as_s2(x))
