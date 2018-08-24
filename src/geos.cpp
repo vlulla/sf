@@ -153,6 +153,60 @@ Rcpp::List sfc_from_geometry(GEOSContextHandle_t hGEOSCtxt, std::vector<GEOSGeom
 	return CPL_read_wkb(out, true, false);
 }
 
+std::vector<std::unique_ptr<GEOSGeom>> geometries_from_sfc_u(GEOSContextHandle_t hGEOSCtxt, Rcpp::List sfc, int *dim = NULL) {
+
+	Rcpp::List sfc_cls = get_dim_sfc(sfc);
+	Rcpp::CharacterVector cls = sfc_cls["_cls"];
+	if (dim != NULL) {
+		Rcpp::IntegerVector sfc_dim = sfc_cls["_dim"];
+		if (sfc_dim.size() == 0)
+			Rcpp::stop("sfc_dim size 0: should not happen"); // #nocov
+		*dim = sfc_dim[0];
+	}
+
+	if (cls[0] == "XYM" || cls[0] == "XYZM")
+		Rcpp::stop("GEOS does not support XYM or XYZM geometries; use st_zm() to drop M\n"); // #nocov
+
+	Rcpp::List wkblst = CPL_write_wkb(sfc, true);
+	std::vector<std::unique_ptr<GEOSGeom>> g(sfc.size());
+	GEOSWKBReader *wkb_reader = GEOSWKBReader_create_r(hGEOSCtxt);
+	for (int i = 0; i < sfc.size(); i++) {
+		Rcpp::RawVector r = wkblst[i];
+		g[i] = std::unique_ptr<GEOSGeom>(new GEOSGeom(GEOSWKBReader_read_r(hGEOSCtxt, wkb_reader, &(r[0]), r.size())));
+	}
+	GEOSWKBReader_destroy_r(hGEOSCtxt, wkb_reader);
+	return g;
+}
+
+Rcpp::List sfc_from_geometry_u(GEOSContextHandle_t hGEOSCtxt, std::vector<std::unique_ptr<GEOSGeom>> geom, int dim = 2, bool free = true) {
+
+	Rcpp::List out(geom.size());
+	GEOSWKBWriter *wkb_writer = GEOSWKBWriter_create_r(hGEOSCtxt);
+	GEOSWKBWriter_setOutputDimension_r(hGEOSCtxt, wkb_writer, dim);
+	// empty point, binary, with R NA's (not NaN's); GEOS can't WKB empty points, 
+	// so we need to work around; see also https://trac.osgeo.org/postgis/ticket/3031
+	// > sf:::CPL_raw_to_hex(st_as_binary(st_point()))
+	// [1] "0101000000a20700000000f07fa20700000000f07f"
+	Rcpp::RawVector empty_point(CPL_hex_to_raw("0101000000a20700000000f07fa20700000000f07f")[0]);
+	for (size_t i = 0; i < geom.size(); i++) {
+		if (GEOSisEmpty_r(hGEOSCtxt, *(geom[i].get())) == 1 &&
+				strcmp("Point", GEOSGeomType_r(hGEOSCtxt, *(geom[i].get()))) == 0) {
+			out[i] = empty_point;
+		} else {
+			size_t size;
+			unsigned char *buf = GEOSWKBWriter_write_r(hGEOSCtxt, wkb_writer, *(geom[i].get()), &size);
+			Rcpp::RawVector raw(size);
+			memcpy(&(raw[0]), buf, size);
+			GEOSFree_r(hGEOSCtxt, buf);
+			out[i] = raw;
+		}
+		if (free)
+			GEOSGeom_destroy_r(hGEOSCtxt, *(geom[i].get()));
+	}
+	GEOSWKBWriter_destroy_r(hGEOSCtxt, wkb_writer);
+	return CPL_read_wkb(out, true, false);
+}
+
 Rcpp::NumericVector get_dim(double dim0, double dim1) {
 	Rcpp::NumericVector dim(2);
 	dim(0) = dim0;
@@ -677,9 +731,9 @@ Rcpp::List CPL_geos_op2(std::string op, Rcpp::List sfcx, Rcpp::List sfcy) {
 
 	int dim = 2;
 	GEOSContextHandle_t hGEOSCtxt = CPL_geos_init();
-	std::vector<GEOSGeom> x = geometries_from_sfc(hGEOSCtxt, sfcx, &dim);
-	std::vector<GEOSGeom> y = geometries_from_sfc(hGEOSCtxt, sfcy, &dim);
-	std::vector<GEOSGeom> out;
+	std::vector<std::unique_ptr<GEOSGeom>> x = geometries_from_sfc_u(hGEOSCtxt, sfcx, &dim);
+	std::vector<std::unique_ptr<GEOSGeom>> y = geometries_from_sfc_u(hGEOSCtxt, sfcy, &dim);
+	std::vector<std::unique_ptr<GEOSGeom>> out;
 	std::vector<double> index_x, index_y;
 	std::vector<size_t> items(x.size());
 
@@ -689,8 +743,8 @@ Rcpp::List CPL_geos_op2(std::string op, Rcpp::List sfcx, Rcpp::List sfcy) {
 		GEOSSTRtree *tree = GEOSSTRtree_create_r(hGEOSCtxt, 10);
 		for (size_t i = 0; i < x.size(); i++) {
 			items[i] = i;
-			if (! GEOSisEmpty_r(hGEOSCtxt, x[i])) {
-				GEOSSTRtree_insert_r(hGEOSCtxt, tree, x[i], &(items[i]));
+			if (! GEOSisEmpty_r(hGEOSCtxt, *(x[i].get()))) {
+				GEOSSTRtree_insert_r(hGEOSCtxt, tree, *(x[i].get()), &(items[i]));
 				tree_empty = false;
 			}
 		}
@@ -699,18 +753,18 @@ Rcpp::List CPL_geos_op2(std::string op, Rcpp::List sfcx, Rcpp::List sfcy) {
 			// select x's using tree:
 			std::vector<size_t> sel;
 			sel.reserve(x.size());
-			if (! GEOSisEmpty_r(hGEOSCtxt, y[i]) && ! tree_empty)
-				GEOSSTRtree_query_r(hGEOSCtxt, tree, y[i], cb, &sel);
+			if (! GEOSisEmpty_r(hGEOSCtxt, *(y[i].get())) && ! tree_empty)
+				GEOSSTRtree_query_r(hGEOSCtxt, tree, *(y[i].get()), cb, &sel);
 			std::sort(sel.begin(), sel.end());
 			for (size_t item = 0; item < sel.size(); item++) {
 				size_t j = sel[item];
-				GEOSGeom geom = GEOSIntersection_r(hGEOSCtxt, x[j], y[i]);
+				GEOSGeom geom = GEOSIntersection_r(hGEOSCtxt, *(x[j].get()), *(y[i].get()));
 				if (geom == NULL)
 					Rcpp::stop("GEOS exception"); // #nocov
 				if (! chk_(GEOSisEmpty_r(hGEOSCtxt, geom))) {
 					index_x.push_back(j + 1);
 					index_y.push_back(i + 1);
-					out.push_back(geom); // keep
+					out.push_back(std::unique_ptr<GEOSGeom>(new GEOSGeom(geom))); // keep
 				} else
 					GEOSGeom_destroy_r(hGEOSCtxt, geom); // discard
 				R_CheckUserInterrupt();
@@ -731,13 +785,13 @@ Rcpp::List CPL_geos_op2(std::string op, Rcpp::List sfcx, Rcpp::List sfcy) {
 
 		for (size_t i = 0; i < y.size(); i++) {
 			for (size_t j = 0; j < x.size(); j++) {
-				GEOSGeom geom = geom_function(hGEOSCtxt, x[j], y[i]);
+				GEOSGeom geom = geom_function(hGEOSCtxt, *(x[j].get()), *(y[i].get()));
 				if (geom == NULL)
 					Rcpp::stop("GEOS exception"); // #nocov
 				if (! chk_(GEOSisEmpty_r(hGEOSCtxt, geom))) {
 					index_x.push_back(j + 1);
 					index_y.push_back(i + 1);
-					out.push_back(geom); // keep
+					out.push_back(std::unique_ptr<GEOSGeom>(new GEOSGeom(geom))); // keep
 				} else
 					GEOSGeom_destroy_r(hGEOSCtxt, geom); // discard
 				R_CheckUserInterrupt();
@@ -746,16 +800,18 @@ Rcpp::List CPL_geos_op2(std::string op, Rcpp::List sfcx, Rcpp::List sfcy) {
 	}
 
 	// clean up x and y:
+	/*
 	for (size_t i = 0; i < x.size(); i++)
 		GEOSGeom_destroy_r(hGEOSCtxt, x[i]);
 	for (size_t i = 0; i < y.size(); i++)
 		GEOSGeom_destroy_r(hGEOSCtxt, y[i]);
+	*/
 
 	Rcpp::NumericMatrix m(index_x.size(), 2); // and a set of 1-based indices to x and y
 	m(_, 0) = Rcpp::NumericVector(index_x.begin(), index_x.end());
 	m(_, 1) = Rcpp::NumericVector(index_y.begin(), index_y.end());
 
-	Rcpp::List ret(sfc_from_geometry(hGEOSCtxt, out, dim)); // destroys out2
+	Rcpp::List ret(sfc_from_geometry_u(hGEOSCtxt, out, dim)); // destroys out
 	CPL_geos_finish(hGEOSCtxt);
 	ret.attr("crs") = sfcx.attr("crs");
 	ret.attr("idx") = m;
