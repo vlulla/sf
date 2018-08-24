@@ -31,7 +31,10 @@ crosses +/-180 long or +/-90 latitude.}
 \value{
 an object of class \code{sf} with additional attributes describing the type
 (E: meridian, N: parallel) degree value, label, start and end coordinates and angle;
-see example.
+see example. The \code{plot12} is a logical attribute that is \code{TRUE}
+for meridians crossing the bottom or parallels crossing the left side of the plot.
+The four attributes \code{bottom}, \code{top}, \code{left}, \code{right} indicate 
+whether graticules touch that side at its begin, end, with both sides, or not at all (none).
 }
 \description{
 Compute graticules and their parameters

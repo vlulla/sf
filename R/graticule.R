@@ -28,6 +28,8 @@
 #' (E: meridian, N: parallel) degree value, label, start and end coordinates and angle;
 #' see example. The \code{plot12} is a logical attribute that is \code{TRUE}
 #' for meridians crossing the bottom or parallels crossing the left side of the plot.
+#' The four attributes \code{bottom}, \code{top}, \code{left}, \code{right} indicate 
+#' whether graticules touch that side at its begin, end, with both sides, or not at all (none).
 #' @examples
 #' library(sf)
 #' library(maps)
@@ -191,11 +193,30 @@ graticule_attributes = function(df) {
 		function(x) { y = x[[length(x)]]; n = nrow(y); apply(y[(n-1):n,], 2, diff) } ))
 	df$angle_end = apply(dxdy, 1, function(x) atan2(x[2], x[1])*180/pi)
 	bb = st_bbox(df)
-	selE = df$type == "E" & df$y_start < min(df$y_start) + 0.001 * (bb[3] - bb[1])
-	selN = df$type == "N" & df$x_start < min(df$x_start) + 0.001 * (bb[4] - bb[2])
+
+	selE = df$type == "E" & df$y_start < min(df$y_start) + 0.001 * (bb[4] - bb[2])
+	selN = df$type == "N" & df$x_start < min(df$x_start) + 0.001 * (bb[3] - bb[1])
 	df$plot12 = selE | selN
+
+	begin_end_both_none = function(begin, end)
+		ifelse(begin & end, "both", ifelse(begin, "begin", ifelse(end, "end", "none")))
+
+	df$bottom = begin_end_both_none(
+		df$y_start < min(df$y_start) + 0.001 * (bb[4] - bb[2]),
+		df$y_end   < min(df$y_start) + 0.001 * (bb[4] - bb[2]))
+	df$top =    begin_end_both_none(
+		df$y_start > max(df$y_start) - 0.001 * (bb[4] - bb[2]),
+		df$y_end   > max(df$y_start) - 0.001 * (bb[4] - bb[2]))
+	df$left =   begin_end_both_none(
+		df$x_start < min(df$x_start) + 0.001 * (bb[3] - bb[1]),
+		df$x_end   < min(df$x_start) + 0.001 * (bb[3] - bb[1]))
+	df$right =  begin_end_both_none(
+		df$x_start > max(df$x_start) - 0.001 * (bb[3] - bb[1]),
+		df$x_end   > max(df$x_start) - 0.001 * (bb[3] - bb[1]))
+
 	df
 }
+
 
 trim_bb = function(bb = c(-180, -90, 180, 90), margin, wrap = c(-180, 180)) {
 	stopifnot(margin > 0 && margin <= 1.0)
