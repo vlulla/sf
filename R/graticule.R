@@ -26,7 +26,8 @@
 #' @details The \code{labels_function} function takes four arguments, \code{lon}, \code{lat}, \code{crs} and \code{datum}, and returns a character vector of length \code{length(lon) + length(lat)} with labels to be plotted at these \code{lon} and \code{lat} values.
 #' @return an object of class \code{sf} with additional attributes describing the type
 #' (E: meridian, N: parallel) degree value, label, start and end coordinates and angle;
-#' see example.
+#' see example. The \code{plot12} is a logical attribute that is \code{TRUE}
+#' for meridians crossing the bottom or parallels crossing the left side of the plot.
 #' @examples
 #' library(sf)
 #' library(maps)
@@ -196,7 +197,7 @@ graticule_attributes = function(df) {
 	df
 }
 
-trim_bb = function(bb = c(-180, -90, 180, 90), margin, wrap=c(-180,180)) {
+trim_bb = function(bb = c(-180, -90, 180, 90), margin, wrap = c(-180, 180)) {
 	stopifnot(margin > 0 && margin <= 1.0)
 	fr = 1.0 - margin
 	if (min(bb[c(1,3)]) >= -15. && max(bb[c(1,3)]) > 195.) { # 0-360 span:
