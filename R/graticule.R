@@ -217,7 +217,7 @@ trim_bb = function(bb = c(-180, -90, 180, 90), margin, wrap=c(-180,180)) {
 degreeLabelsNS = function(x) {
 	pos = sign(x) + 2
 	dir = c("*S", "", "*N")
-	paste0(abs(x), "*degree", dir[pos])
+	paste0("`", format(abs(x)), "`", "*degree", dir[pos])
 }
 
 degreeLabelsEW = function(x) {
@@ -228,5 +228,5 @@ degreeLabelsEW = function(x) {
 	if (any(x == 180))
 		pos[x == 180] = 2
 	dir = c("*W", "", "*E")
-	paste0(abs(x), "*degree", dir[pos])
+	paste0("`", format(abs(x)), "`", "*degree", dir[pos])
 }
