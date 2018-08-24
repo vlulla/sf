@@ -6,7 +6,7 @@
 \usage{
 st_graticule(x = c(-180, -90, 180, 90), crs = st_crs(x),
   datum = st_crs(4326), ..., lon = NULL, lat = NULL, ndiscr = 100,
-  margin = 0.001)
+  margin = 0.001, labels_function = degree_label)
 }
 \arguments{
 \item{x}{object of class \code{sf}, \code{sfc} or \code{sfg} or numeric vector with bounding box given as (minx, miny, maxx, maxy).}
@@ -25,6 +25,8 @@ st_graticule(x = c(-180, -90, 180, 90), crs = st_crs(x),
 
 \item{margin}{numeric; small number to trim a longlat bounding box that touches or
 crosses +/-180 long or +/-90 latitude.}
+
+\item{labels_function}{function that computes axis tic labels from coordinates; see Details}
 }
 \value{
 an object of class \code{sf} with additional attributes describing the type
@@ -33,6 +35,9 @@ see example.
 }
 \description{
 Compute graticules and their parameters
+}
+\details{
+The \code{labels_function} function takes four arguments, \code{lon}, \code{lat}, \code{crs} and \code{datum}, and returns a character vector of length \code{length(lon) + length(lat)} with labels to be plotted at these \code{lon} and \code{lat} values.
 }
 \section{Use of graticules}{
 

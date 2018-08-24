@@ -22,6 +22,8 @@
 #' @param margin numeric; small number to trim a longlat bounding box that touches or
 #'  crosses +/-180 long or +/-90 latitude.
 #' @param ... ignored
+#' @param labels_function function that computes axis tic labels from coordinates; see Details
+#' @details The \code{labels_function} function takes four arguments, \code{lon}, \code{lat}, \code{crs} and \code{datum}, and returns a character vector of length \code{length(lon) + length(lat)} with labels to be plotted at these \code{lon} and \code{lat} values.
 #' @return an object of class \code{sf} with additional attributes describing the type
 #' (E: meridian, N: parallel) degree value, label, start and end coordinates and angle;
 #' see example.
@@ -61,7 +63,7 @@
 #' plot(usa, graticule = st_crs(4326), axes = TRUE, lon = seq(-60,-130,by=-10))
 st_graticule = function(x = c(-180,-90,180,90), crs = st_crs(x),
 	datum = st_crs(4326), ..., lon = NULL, lat = NULL, ndiscr = 100,
-	margin = 0.001)
+	margin = 0.001, labels_function = degree_label)
 {
 	if (missing(x)) {
 		crs = datum
@@ -151,10 +153,7 @@ st_graticule = function(x = c(-180,-90,180,90), crs = st_crs(x),
 
 	df = data.frame(degree = c(lon, lat))
 	df$type = c(rep("E", length(lon)), rep("N", length(lat)))
-	df$degree_label = if (is.na(crs) || !isTRUE(st_is_longlat(datum)))
-			c(format(lon), format(lat))
-		else
-			c(degreeLabelsEW(lon), degreeLabelsNS(lat))
+	df$degree_label = labels_function(lon, lat, crs, datum)
 
 	geom = st_sfc(c(long_list, lat_list), crs = datum)
 
@@ -211,6 +210,13 @@ trim_bb = function(bb = c(-180, -90, 180, 90), margin, wrap=c(-180,180)) {
 	bb[2] = max(bb[2], -90. * fr)
 	bb[4] = min(bb[4],  90. * fr)
 	bb
+}
+	
+degree_label = function(lon, lat, crs, datum) {
+	if (is.na(crs) || !isTRUE(st_is_longlat(datum)))
+		c(format(lon), format(lat))
+	else
+		c(degreeLabelsEW(lon), degreeLabelsNS(lat))
 }
 
 # copied from sp:
